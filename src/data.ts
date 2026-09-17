@@ -1,0 +1,207 @@
+import { ServiceItem, PortfolioItem, TestimonialItem } from './types';
+
+export const COMPANY_INFO = {
+  name: 'Solareign Solar Power Services',
+  tagline: 'Renewable Solar Energy Solutions',
+  subheadline: 'Hybrid Packages Available | Power Your Home & Business with Clean, Reliable Energy',
+  address: 'Bacoor City, Bacoor, Philippines, 4102',
+  phone: '0908 145 4906',
+  mobile: '0908 145 4906',
+  email: 'solareignpower09@gmail.com',
+  facebook: 'https://facebook.com/solareign.solar',
+  facebookHandle: '@SolareignSolarServices',
+  serviceHours: 'Mon - Sat: 8:00 AM - 5:00 PM',
+  logoUrl: 'https://cdn.phototourl.com/free/2026-09-13-c94af964-6f09-4262-8f91-fa6da37e47ea.png',
+};
+
+export const SERVICES_DATA: ServiceItem[] = [
+  {
+    id: 'battery-backup-installation',
+    title: 'Battery Backup Installation',
+    description: 'Reliable lithium battery systems that automatically provide backup power to your lights, refrigerator, and essential appliances during brownouts.',
+    iconName: 'BatteryCharging',
+    features: [
+      'Size battery capacity carefully.',
+      'Mount storage units securely.',
+      'Wire battery management.',
+      'Program backup discharge.',
+      'Test emergency cut-off switches.',
+      'Verify full safety codes.',
+    ],
+  },
+  {
+    id: 'ups-inverter-upgrades',
+    title: 'Whole-Home UPS/Inverter Upgrades',
+    description: 'Upgrade your existing inverter to a modern hybrid unit that delivers stable electricity and supports air conditioning and heavy household appliances.',
+    iconName: 'Zap',
+    features: [
+      'Inspect existing home wiring.',
+      'Disconnect legacy units safely.',
+      'Mount hybrid units firmly.',
+      'Configure routing parameters.',
+      'Calibrate voltage accurately.',
+      'Test systems under load.',
+    ],
+  },
+  {
+    id: 'panel-cleaning-inspection',
+    title: 'Panel Cleaning & Inspection',
+    description: 'Gentle, scratch-free solar panel washing and basic wiring inspection to remove accumulated dust, soot, and bird droppings.',
+    iconName: 'Sparkles',
+    features: [
+      'Check for surface cracks.',
+      'Use deionized water safely.',
+      'Clean wiring box seals.',
+      'Inspect mounting hardware tightly.',
+      'Measure electrics accurately.',
+      'Measure electrical output.',
+    ],
+  },
+  {
+    id: 'performance-monitoring-setup',
+    title: 'Performance Monitoring Setup',
+    description: 'Simple mobile app monitoring so you can see how much solar energy your panels produce and how much power your home consumes every day.',
+    iconName: 'Activity',
+    features: [
+      'Install data communication gateways.',
+      'Connect hardware to Wi-Fi.',
+      'Setup client mobile accounts.',
+      'Calibrate production meters.',
+      'Enable automated system alerts.',
+      'Guide clients through navigation.',
+    ],
+  },
+  {
+    id: 'system-health-checks-inverter-diagnostics',
+    title: 'System Health Checks & Inverter Diagnostics',
+    description: 'Comprehensive electrical safety inspection, wire and breaker testing, and inverter error diagnosis to make sure your solar system runs safely.',
+    iconName: 'ShieldCheck',
+    features: [
+      'Test string voltage levels.',
+      'Scan for thermal hotspots.',
+      'Analyze historical generation logs.',
+      'Check terminal connections.',
+      'Verify grounding system.',
+      'Issue detailed repair quotes.',
+    ],
+  },
+  {
+    id: 'net-metering-application-assistance',
+    title: 'Net Metering Application Assistance',
+    description: 'Step-by-step assistance with utility paperwork and requirements so you can export surplus daytime solar electricity for bill credits.',
+    iconName: 'FileCheck',
+    features: [
+      'Compile utility paperwork.',
+      'Submit documents to utilities.',
+      'Coordinate official site audits.',
+      'Track application status closely.',
+      'Facilitate bi-directional meter.',
+      'Confirm active export credits.',
+    ],
+  },
+];
+
+export const PORTFOLIO_DATA: PortfolioItem[] = [
+  {
+    id: 'port-1',
+    title: 'Modern Two-Storey Residence',
+    category: 'Hybrid',
+    location: 'Bacoor City, Cavite',
+    systemSize: '5kW Hybrid System - Residential',
+    image: 'https://images.unsplash.com/photo-1497440001374-f26997328c1b?auto=format&fit=crop&w=1000&q=80',
+    description: '5kW Hybrid installation with 10kWh LiFePO4 backup battery storage ensuring zero power disruptions during grid outages.',
+  },
+  {
+    id: 'port-2',
+    title: 'Commercial Warehouse Facility',
+    category: 'Commercial',
+    location: 'Bacoor City, Cavite',
+    systemSize: '15kW Commercial Grid-Tie System',
+    image: 'https://images.unsplash.com/photo-1545208942-e1c9c916524b?auto=format&fit=crop&w=1000&q=80',
+    description: '15kW three-phase rooftop system significantly lowering commercial daytime machinery operating expenditure.',
+  },
+  {
+    id: 'port-3',
+    title: 'Subdivision Family Villa',
+    category: 'Residential',
+    location: 'Dasmariñas, Cavite',
+    systemSize: '8kW Hybrid System - Residential',
+    image: 'https://images.unsplash.com/photo-1613665813446-82a78c468a1d?auto=format&fit=crop&w=1000&q=80',
+    description: '8kW residential hybrid solar package with smart inverter cloud monitoring and automated net-metering integration.',
+  },
+  {
+    id: 'port-4',
+    title: 'Retail Store & Office Rooftop',
+    category: 'Commercial',
+    location: 'Imus, Cavite',
+    systemSize: '10kW Grid-Tie Commercial System',
+    image: 'https://images.unsplash.com/photo-1545208942-e1c9c916524b?auto=format&fit=crop&w=1000&q=80',
+    description: '10kW grid-tie system supplying clean solar energy to retail spaces with zero downtime and automatic net metering.',
+  },
+  {
+    id: 'port-5',
+    title: 'Executive Residence Rooftop',
+    category: 'Residential',
+    location: 'Bacoor City, Cavite',
+    systemSize: '6kW Hybrid System - Residential',
+    image: 'https://images.unsplash.com/photo-1559302504-64aae6ca6b6d?auto=format&fit=crop&w=1000&q=80',
+    description: 'Sleek black-frame Tier-1 solar panels providing clean electricity and charging an integrated home energy storage system.',
+  },
+  {
+    id: 'port-6',
+    title: 'Eco-Friendly Suburban Home',
+    category: 'Residential',
+    location: 'General Trias, Cavite',
+    systemSize: '3.5kW Grid-Tie System - Residential',
+    image: 'https://images.unsplash.com/photo-1592833159155-c62df1b65634?auto=format&fit=crop&w=1000&q=80',
+    description: 'Compact residential system reducing baseline electricity consumption by 75% for an eco-conscious homeowner.',
+  },
+];
+
+export const TESTIMONIALS_DATA: TestimonialItem[] = [
+  {
+    id: 'test-1',
+    name: 'Engr. Roberto Santos',
+    roleLocation: 'Bacoor City Homeowner',
+    quote: 'Solareign transformed our electric bill from ₱14,000 to under ₱1,800 monthly! Their 5kW hybrid system handled the recent Cavite typhoons without a single flicker in our lights.',
+    rating: 5,
+    highlight: '₱12,000+ monthly savings',
+  },
+  {
+    id: 'test-2',
+    name: 'Maria Elena Diaz',
+    roleLocation: 'Cavite Commercial Client & Business Owner',
+    quote: 'The engineering craftsmanship and prompt net-metering assistance were outstanding. Their commercial solar team completed our 15kW installation cleanly within schedule.',
+    rating: 5,
+    highlight: 'Seamless net-metering setup',
+  },
+  {
+    id: 'test-3',
+    name: 'Arch. Ferdinand Cruz',
+    roleLocation: 'Dasmariñas Resident',
+    quote: 'I am meticulous when it comes to rooftop aesthetics and safety. Solareign used top-tier mounting rails, neat cable raceways, and dependable lithium storage. Highest recommendation!',
+    rating: 5,
+    highlight: 'Pristine engineering & aesthetics',
+  },
+];
+
+export const WHY_CHOOSE_US_PILLARS = [
+  {
+    id: 'quality',
+    title: 'Uncompromised Quality & Engineering',
+    description: 'We install exclusively Tier-1 monocrystalline panels, certified high-efficiency hybrid inverters, and heavy-duty anodized aluminum roof mounting systems engineered for Philippine weather and typhoons.',
+    stats: '25-Year Panel Linear Warranty',
+  },
+  {
+    id: 'customization',
+    title: 'Personalized & Hybrid Energy Customization',
+    description: 'Every home and facility has distinct daily energy profiles. We perform thorough electrical load assessments and customize battery storage capacities precisely to your lifestyle and budget.',
+    stats: 'Tailored 3kW to 50kW+ Packages',
+  },
+  {
+    id: 'support',
+    title: 'Dedicated After-Sales & Warranty Support',
+    description: 'Our commitment does not end with installation. We provide full documentation, utility net-metering processing, preventive maintenance visits, and responsive local customer service right here in Cavite.',
+    stats: 'Local Bacoor Support Hub',
+  },
+];

@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+/* Ensure arbitrary long unbroken words wrap properly within their container */
+.rich-text-content,
+.rich-text-content *,
+.break-words {
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+/* Remove underline and bottom border on h2 & h3 headings in rich text, with H2 top space reduced by 10% */
+.rich-text-content h2,
+.rich-text-content h2 *,
+.rich-text-editor h2,
+[contenteditable] h2,
+h2.rich-heading-2 {
+  border-bottom: none !important;
+  text-decoration: none !important;
+  padding-top: 10.40px !important; /* Reduced top padding by 10% from 11.56px */
+  padding-bottom: 4.34px !important;
+  margin-top: 7.80px !important; /* Reduced top margin by 10% from 8.67px */
+  margin-bottom: 2.89px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.025em !important;
+  line-height: 1.3 !important;
+}
+
+.rich-text-content h3,
+.rich-text-content h3 *,
+.rich-text-editor h3,
+[contenteditable] h3 {
+  border-bottom: none !important;
+  text-decoration: none !important;
+  padding-top: 11.56px !important;
+  padding-bottom: 4.34px !important;
+  margin-top: 8.67px !important;
+  margin-bottom: 2.89px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.025em !important;
+  line-height: 1.3 !important;
+}
+
+/* Specific distance reduction when H3 directly follows H2 */
+.rich-text-content h2 + h3,
+.rich-text-editor h2 + h3,
+[contenteditable] h2 + h3 {
+  margin-top: 5.78px !important;
+  padding-top: 5.78px !important;
+}
+
+/* Distinct format styles and sizing for H2 vs H3 hierarchy */
+.rich-text-content h2,
+.rich-text-content h2 *,
+.rich-text-editor h2,
+.rich-text-editor h2 *,
+[contenteditable] h2,
+[contenteditable] h2 * {
+  font-size: 1.25rem !important; /* 20px */
+  font-weight: 900 !important;
+  color: #0f172a !important;
+}
+
+.rich-text-content h3,
+.rich-text-content h3 *,
+.rich-text-editor h3,
+.rich-text-editor h3 *,
+[contenteditable] h3,
+[contenteditable] h3 * {
+  font-size: 1.0625rem !important; /* 17px - properly scaled down from H2 */
+  font-weight: 800 !important;
+  color: #1e293b !important;
+}
+
+@media (min-width: 640px) {
+  .rich-text-content h2,
+  .rich-text-content h2 *,
+  .rich-text-editor h2,
+  .rich-text-editor h2 *,
+  [contenteditable] h2,
+  [contenteditable] h2 * {
+    font-size: 1.45rem !important; /* ~23.2px */
+  }
+
+  .rich-text-content h3,
+  .rich-text-content h3 *,
+  .rich-text-editor h3,
+  .rich-text-editor h3 *,
+  [contenteditable] h3,
+  [contenteditable] h3 * {
+    font-size: 1.15rem !important; /* ~18.4px - distinct typographic contrast */
+  }
+}
+
+/* Ensure rich text ordered (numbered) and unordered (bullet) lists function and display properly */
+.rich-text-content ol,
+.rich-text-editor ol,
+[contenteditable] ol {
+  list-style-type: decimal !important;
+  list-style-position: outside !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.rich-text-content ul,
+.rich-text-editor ul,
+[contenteditable] ul {
+  list-style-type: disc !important;
+  list-style-position: outside !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.rich-text-content ol > li,
+.rich-text-editor ol > li,
+[contenteditable] ol > li {
+  display: list-item !important;
+  list-style-type: decimal !important;
+  padding-left: 0.25rem !important;
+  margin-bottom: 0.35rem !important;
+  line-height: 1.6 !important;
+}
+
+.rich-text-content ul > li,
+.rich-text-editor ul > li,
+[contenteditable] ul > li {
+  display: list-item !important;
+  list-style-type: disc !important;
+  padding-left: 0.25rem !important;
+  margin-bottom: 0.35rem !important;
+  line-height: 1.6 !important;
+}
+
+.rich-text-content ol > li::marker,
+.rich-text-editor ol > li::marker,
+[contenteditable] ol > li::marker {
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+
+.rich-text-content ul > li::marker,
+.rich-text-editor ul > li::marker,
+[contenteditable] ul > li::marker {
+  color: #334155 !important;
+}
+
+/* Custom Date Picker Styling: Suppress native black browser calendar glyphs in favor of custom white button */
+.date-picker-input-white::-webkit-calendar-picker-indicator {
+  opacity: 0 !important;
+  display: none !important;
+  -webkit-appearance: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+}
+
+.date-picker-input-white::-webkit-inner-spin-button,
+.date-picker-input-white::-webkit-clear-button {
+  display: none !important;
+  -webkit-appearance: none !important;
+}
+
+/* Fallback inversion to ensure any visible native indicator renders white, never black */
+.date-picker-input-white {
+  color-scheme: dark;
+}
+
