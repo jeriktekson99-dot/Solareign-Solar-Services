@@ -69,7 +69,7 @@ export default function SystemSettingsPage({
   initialOperations = {
     branchName: 'Solareign Solar Power Services - Cavite Operations',
     contactEmail: 'engineering@solareign.ph',
-    hotline: '+63 917 843 4018',
+    hotline: '0908 145 4906',
     meralcoRate: '12.50',
     netMeteringExportRate: '5.20',
     defaultInverterBrand: 'Deye Hybrid / Growatt SPF Series',
@@ -165,7 +165,7 @@ export default function SystemSettingsPage({
       setOldPassword('');
       setNewPassword('');
       setRetypeNewPassword('');
-      showToast('Admin password updated successfully. New credentials active for future logins.');
+      showToast('Admin password updated successfully in Supabase Authorization.');
       setTimeout(() => setPasswordSuccess(false), 5000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update administrative password.';

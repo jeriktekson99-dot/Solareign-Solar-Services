@@ -9,6 +9,7 @@ import TermsOfUsePage from './components/TermsOfUsePage';
 import SafetyCompliancePage from './components/SafetyCompliancePage';
 import AdminLoginPage from './components/AdminLoginPage';
 import Hero from './components/Hero';
+import PartnerLogoMarquee from './components/PartnerLogoMarquee';
 import ProblemSolution from './components/ProblemSolution';
 import AboutCompany from './components/AboutCompany';
 import Services from './components/Services';
@@ -210,6 +211,8 @@ function AppContent() {
                 if (el) el.scrollIntoView({ behavior: 'smooth' });
               }}
             />
+            {/* Dedicated Light-Gray Authorized Tier-1 Technology Integration Partners Logo Marquee */}
+            <PartnerLogoMarquee />
             <ProblemSolution />
             <AboutCompany onLearnMoreClick={() => setActivePage('about')} />
             <Services

@@ -16,14 +16,23 @@ import {
 import { SocialLinksConfig, OperationalSettingsConfig } from '../components/SystemSettingsPage';
 import {
   saveSystemConfigSupabase,
+  fetchAllSystemConfigSupabase,
+  fetchSystemConfigSupabase,
   syncLeadToSupabase,
   syncProjectToSupabase,
   syncArchiveRecordToSupabase,
   syncAppointmentToSupabase,
+  deleteProjectFromSupabase,
+  deleteArchiveRecordFromSupabase,
   fetchPortfolioProjectsSupabase,
   PortfolioProjectRow,
   getSupabase,
-  isSupabaseConfigured
+  isSupabaseConfigured,
+  signInWithSupabaseAuth,
+  signOutSupabaseAuth,
+  updateSupabaseUserPassword,
+  resetSupabasePasswordForEmail,
+  User
 } from '../lib/supabase';
 
 export interface LeadItem {
@@ -104,6 +113,11 @@ export interface ArchivedRecord {
   deletedDateTime?: string;
   reason?: string;
 
+  // Track original entity IDs to prevent resurrection from Supabase sync
+  originalId?: string;
+  originalProjectCode?: string;
+  originalData?: any;
+
   // Supabase Datatable Schema Fields (Archive/Trash)
   archivedItemId?: string;
   originalStreamSource?: string;
@@ -122,6 +136,7 @@ const STORAGE_KEYS = {
   LEADS: 'solareign_leads_v2',
   OCULAR_TRIPS: 'solareign_ocular_trips_v2',
   ARCHIVED_RECORDS: 'solareign_archived_records_v2',
+  DELETED_PROJECT_IDS: 'solareign_deleted_project_ids_v2',
   SETTINGS: 'solareign_settings_v2',
   SOCIAL_LINKS: 'solareign_social_links_v2',
   ALERTS: 'solareign_alerts_v2',
@@ -424,7 +439,7 @@ const INITIAL_SOCIAL_LINKS: SocialLinksConfig = {
 const INITIAL_SETTINGS: OperationalSettingsConfig = {
   branchName: 'Solareign Solar Power Services - Cavite Operations',
   contactEmail: 'engineering@solareign.ph',
-  hotline: '+63 917 843 4018',
+  hotline: '0908 145 4906',
   meralcoRate: '12.50',
   netMeteringExportRate: '5.20',
   defaultInverterBrand: 'Deye Hybrid / Growatt SPF Series',
@@ -447,20 +462,29 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
+const FALLBACK_SOLAR_GALLERY = [
+  'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1508873696983-2df5293cb32b?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1497440001374-f26997328c1b?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1545208942-e1c9c916524b?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1559302504-64aae6ca6b6d?auto=format&fit=crop&w=1000&q=80'
+];
+
 function sanitizePayloadForQuota<T>(value: T): T {
   if (!value) return value;
   if (Array.isArray(value)) {
     return value.map((item) => {
       if (item && typeof item === 'object') {
         const copy = { ...item } as Record<string, unknown>;
-        // If image is a massive data URL (> 80KB), substitute with high-reliability CDN fallback
-        if (typeof copy.image === 'string' && copy.image.startsWith('data:') && copy.image.length > 80000) {
-          copy.image = 'https://images.unsplash.com/photo-1508873696983-2df5293cb32b?auto=format&fit=crop&w=1000&q=80';
+        // If image is a massive uncompressed data URL (> 250KB chars), substitute with high-reliability CDN fallback
+        if (typeof copy.image === 'string' && copy.image.startsWith('data:') && copy.image.length > 250000) {
+          copy.image = FALLBACK_SOLAR_GALLERY[0];
         }
         if (Array.isArray(copy.galleryImages)) {
-          copy.galleryImages = copy.galleryImages.map((gImg) => {
-            if (typeof gImg === 'string' && gImg.startsWith('data:') && gImg.length > 80000) {
-              return 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=1000&q=80';
+          copy.galleryImages = copy.galleryImages.map((gImg, idx) => {
+            if (typeof gImg === 'string' && gImg.startsWith('data:') && gImg.length > 250000) {
+              return FALLBACK_SOLAR_GALLERY[(idx + 1) % FALLBACK_SOLAR_GALLERY.length];
             }
             return gImg;
           });
@@ -620,18 +644,76 @@ export function convertSupabaseProjectToProjectItem(row: PortfolioProjectRow | R
   };
 }
 
-function mergeProjectsWithSupabase(localList: ProjectItem[], sbRows: PortfolioProjectRow[]): ProjectItem[] {
+function mergeProjectsWithSupabase(
+  localList: ProjectItem[],
+  sbRows: PortfolioProjectRow[],
+  archivedRecords: ArchivedRecord[] = [],
+  deletedProjectIds: string[] = []
+): ProjectItem[] {
   if (!sbRows || sbRows.length === 0) return localList;
 
-  const sbProjects = sbRows.map(convertSupabaseProjectToProjectItem);
+  // Build a set of forbidden IDs / codes that are archived or deleted
+  const forbiddenCodes = new Set<string>();
+  archivedRecords.forEach((r) => {
+    if (r.originalId) forbiddenCodes.add(r.originalId.toLowerCase());
+    if (r.originalProjectCode) forbiddenCodes.add(r.originalProjectCode.toLowerCase());
+    if (r.id) forbiddenCodes.add(r.id.toLowerCase());
+    if (r.archiveCode) forbiddenCodes.add(r.archiveCode.toLowerCase());
+  });
+  deletedProjectIds.forEach((id) => {
+    if (id) forbiddenCodes.add(id.toLowerCase());
+  });
+
+  // Filter out any Supabase row that has been archived, deleted, or marked as archived
+  const activeSbRows = sbRows.filter((r) => {
+    if (r.status && r.status.toLowerCase() === 'archived') return false;
+    const pId = (r.project_id || '').toLowerCase();
+    const id = (r.id || '').toLowerCase();
+    if (pId && forbiddenCodes.has(pId)) return false;
+    if (id && forbiddenCodes.has(id)) return false;
+    return true;
+  });
+
+  const sbProjects = activeSbRows.map(convertSupabaseProjectToProjectItem);
   const sbIds = new Set(sbProjects.map((p) => p.id));
-  const sbCodes = new Set(sbProjects.map((p) => p.projectCode || p.id));
+  const sbCodes = new Set(sbProjects.map((p) => (p.projectCode || p.id).toLowerCase()));
 
-  // Keep local items that are not overridden by Supabase
-  const remainingLocal = localList.filter((p) => !sbIds.has(p.id) && !sbCodes.has(p.projectCode || p.id));
+  // Keep local items that are not overridden by Supabase and not forbidden
+  const remainingLocal = localList.filter((p) => {
+    const pId = (p.id || '').toLowerCase();
+    const pCode = (p.projectCode || '').toLowerCase();
+    if (forbiddenCodes.has(pId) || (pCode && forbiddenCodes.has(pCode))) {
+      return false;
+    }
+    return !sbIds.has(p.id) && !sbCodes.has(pCode);
+  });
 
-  // Supabase items take priority at the top, followed by remaining local items
-  return [...sbProjects, ...remainingLocal];
+  // Merge gallery images: If local project already has more images uploaded, preserve them!
+  const localMap = new Map<string, ProjectItem>();
+  localList.forEach((p) => {
+    if (p.id) localMap.set(p.id.toLowerCase(), p);
+    if (p.projectCode) localMap.set(p.projectCode.toLowerCase(), p);
+  });
+
+  const enrichedSbProjects = sbProjects.map((sbP) => {
+    const pId = (sbP.id || '').toLowerCase();
+    const pCode = (sbP.projectCode || '').toLowerCase();
+    const localMatch = (pId && localMap.get(pId)) || (pCode && localMap.get(pCode));
+    if (localMatch) {
+      const localGallery = localMatch.galleryImages || [];
+      const sbGallery = sbP.galleryImages || [];
+      if (localGallery.length > sbGallery.length) {
+        return {
+          ...sbP,
+          galleryImages: localGallery,
+          image: localMatch.image || sbP.image
+        };
+      }
+    }
+    return sbP;
+  });
+
+  return [...enrichedSbProjects, ...remainingLocal];
 }
 
 interface AddLeadOptions {
@@ -672,16 +754,18 @@ export interface DataContextType {
   addOcularTrip: (trip: OcularTrip) => void;
 
   // Actions: System Configuration
-  saveSettings: (newSettings: OperationalSettingsConfig) => void;
-  saveSocialLinks: (newLinks: SocialLinksConfig) => void;
+  saveSettings: (newSettings: OperationalSettingsConfig) => Promise<void> | void;
+  saveSocialLinks: (newLinks: SocialLinksConfig) => Promise<void> | void;
+  refreshSystemConfigFromSupabase: () => Promise<void>;
 
-  // Security & Administrative Credentials and Session
-  adminPassword: string;
+  // Security & Administrative Credentials and Session (Supabase Authorization)
+  adminUser: User | null;
   isAdminAuthenticated: boolean;
-  verifyAdminPassword: (pass: string) => boolean;
-  changeAdminPassword: (oldPass: string, newPass: string) => { success: boolean; message: string };
-  loginAdmin: () => void;
-  logoutAdmin: () => void;
+  loginAdminWithSupabase: (email: string, pass: string) => Promise<{ success: boolean; error?: string; user?: User }>;
+  changeAdminPassword: (oldPass: string, newPass: string) => Promise<{ success: boolean; message: string }> | { success: boolean; message: string };
+  resetAdminPasswordWithSupabase: (email: string) => Promise<{ success: boolean; error?: string }>;
+  loginAdmin: (user?: User) => void;
+  logoutAdmin: () => void | Promise<void>;
 
   // Supabase Live Connectivity & Manual Refresh
   isSupabaseConnected: boolean;
@@ -702,16 +786,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Initialize state from localStorage or initial seed arrays
   const [projects, setProjects] = useState<ProjectItem[]>(() => {
     const rawProjects = readStorage<ProjectItem[]>(STORAGE_KEYS.PROJECTS, PORTFOLIO_PROJECTS);
-    return rawProjects.map((p) => {
-      if ((p.segment as string) === 'Off-Grid' || (p.category as string) === 'Off-Grid Systems') {
-        return {
-          ...p,
-          segment: 'Residential' as const,
-          category: 'Residential Hybrid' as const
-        };
-      }
-      return p;
+    const deletedIds = new Set(
+      readStorage<string[]>(STORAGE_KEYS.DELETED_PROJECT_IDS, []).map((s) => s.toLowerCase())
+    );
+    const archivedRecs = readStorage<ArchivedRecord[]>(STORAGE_KEYS.ARCHIVED_RECORDS, INITIAL_ARCHIVED_RECORDS);
+    archivedRecs.forEach((arc) => {
+      if (arc.originalId) deletedIds.add(arc.originalId.toLowerCase());
+      if (arc.originalProjectCode) deletedIds.add(arc.originalProjectCode.toLowerCase());
+      if (arc.archivedItemId) deletedIds.add(arc.archivedItemId.toLowerCase());
+      if (arc.archiveCode) deletedIds.add(arc.archiveCode.toLowerCase());
     });
+
+    return rawProjects
+      .filter((p) => {
+        const id = (p.id || '').toLowerCase();
+        const code = (p.projectCode || '').toLowerCase();
+        return !deletedIds.has(id) && !deletedIds.has(code);
+      })
+      .map((p) => {
+        if ((p.segment as string) === 'Off-Grid' || (p.category as string) === 'Off-Grid Systems') {
+          return {
+            ...p,
+            segment: 'Residential' as const,
+            category: 'Residential Hybrid' as const
+          };
+        }
+        return p;
+      });
   });
 
   const [leads, setLeads] = useState<LeadItem[]>(() => {
@@ -741,9 +842,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     readStorage<ArchivedRecord[]>(STORAGE_KEYS.ARCHIVED_RECORDS, INITIAL_ARCHIVED_RECORDS)
   );
 
-  const [settings, setSettings] = useState<OperationalSettingsConfig>(() =>
-    readStorage<OperationalSettingsConfig>(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS)
-  );
+  const [settings, setSettings] = useState<OperationalSettingsConfig>(() => {
+    const loaded = readStorage<OperationalSettingsConfig>(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
+    if (!loaded.hotline || loaded.hotline.includes('843') || loaded.hotline.includes('+63')) {
+      loaded.hotline = '0908 145 4906';
+      writeStorage(STORAGE_KEYS.SETTINGS, loaded);
+    }
+    return loaded;
+  });
 
   const [socialLinks, setSocialLinks] = useState<SocialLinksConfig>(() =>
     readStorage<SocialLinksConfig>(STORAGE_KEYS.SOCIAL_LINKS, INITIAL_SOCIAL_LINKS)
@@ -757,13 +863,45 @@ export function DataProvider({ children }: { children: ReactNode }) {
     readStorage<number>(STORAGE_KEYS.UNREAD_COUNT, 0)
   );
 
-  const [adminPassword, setAdminPassword] = useState<string>(() =>
-    readStorage<string>(STORAGE_KEYS.ADMIN_PASSWORD, 'solareign2026')
-  );
+  const [adminUser, setAdminUser] = useState<User | null>(null);
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() =>
     readStorage<boolean>(STORAGE_KEYS.ADMIN_AUTH_SESSION, false)
   );
+
+  // Initialize Supabase Auth Session and state listener
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb) return;
+
+    sb.auth.getSession().then(({ data: { session }, error }) => {
+      if (!error && session?.user) {
+        setAdminUser(session.user);
+        setIsAdminAuthenticated(true);
+        writeStorage(STORAGE_KEYS.ADMIN_AUTH_SESSION, true);
+      } else if (!session) {
+        setAdminUser(null);
+        setIsAdminAuthenticated(false);
+        writeStorage(STORAGE_KEYS.ADMIN_AUTH_SESSION, false);
+      }
+    });
+
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setAdminUser(session.user);
+        setIsAdminAuthenticated(true);
+        writeStorage(STORAGE_KEYS.ADMIN_AUTH_SESSION, true);
+      } else {
+        setAdminUser(null);
+        setIsAdminAuthenticated(false);
+        writeStorage(STORAGE_KEYS.ADMIN_AUTH_SESSION, false);
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, []);
 
   // Cross-Tab Synchronization Listener (Reacts when another tab/window updates localStorage)
   useEffect(() => {
@@ -780,7 +918,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setSocialLinks(readStorage<SocialLinksConfig>(STORAGE_KEYS.SOCIAL_LINKS, INITIAL_SOCIAL_LINKS));
       setSystemAlerts(readStorage<SystemAlertItem[]>(STORAGE_KEYS.ALERTS, []));
       setUnreadCount(readStorage<number>(STORAGE_KEYS.UNREAD_COUNT, 0));
-      setAdminPassword(readStorage<string>(STORAGE_KEYS.ADMIN_PASSWORD, 'solareign2026'));
       setIsAdminAuthenticated(readStorage<boolean>(STORAGE_KEYS.ADMIN_AUTH_SESSION, false));
     };
 
@@ -792,6 +929,49 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const isSupabaseConnected = isSupabaseConfigured();
 
+  // Supabase System Configuration Live Synchronization (Social links, Admin credentials, Settings)
+  const refreshSystemConfigFromSupabase = useCallback(async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const configMap = await fetchAllSystemConfigSupabase();
+      if (!configMap) return;
+
+      // 1. Social & Integrated Media Channels
+      if (configMap.integrated_urls_channels) {
+        const remoteSocial = configMap.integrated_urls_channels as Partial<SocialLinksConfig>;
+        setSocialLinks((prev) => {
+          const merged: SocialLinksConfig = {
+            ...prev,
+            ...remoteSocial,
+            facebookUrl: remoteSocial.facebookUrl !== undefined ? remoteSocial.facebookUrl : prev.facebookUrl,
+            instagramUrl: remoteSocial.instagramUrl !== undefined ? remoteSocial.instagramUrl : prev.instagramUrl,
+            tiktokUrl: remoteSocial.tiktokUrl !== undefined ? remoteSocial.tiktokUrl : prev.tiktokUrl,
+            websiteUrl: remoteSocial.websiteUrl !== undefined ? remoteSocial.websiteUrl : prev.websiteUrl,
+            webhookUrl: remoteSocial.webhookUrl !== undefined ? remoteSocial.webhookUrl : prev.webhookUrl,
+            customUrls: Array.isArray(remoteSocial.customUrls) ? remoteSocial.customUrls : prev.customUrls
+          };
+          writeStorage(STORAGE_KEYS.SOCIAL_LINKS, merged);
+          return merged;
+        });
+      }
+
+      // 2. Operational Settings
+      if (configMap.operational_settings) {
+        const remoteOps = configMap.operational_settings as Partial<OperationalSettingsConfig>;
+        setSettings((prev) => {
+          const merged: OperationalSettingsConfig = {
+            ...prev,
+            ...remoteOps
+          };
+          writeStorage(STORAGE_KEYS.SETTINGS, merged);
+          return merged;
+        });
+      }
+    } catch (err) {
+      console.warn('[DataContext] Failed to fetch Supabase system configuration:', err);
+    }
+  }, []);
+
   // Supabase Live Synchronization
   const refreshProjectsFromSupabase = useCallback(async () => {
     if (!isSupabaseConfigured()) return;
@@ -799,7 +979,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const rows = await fetchPortfolioProjectsSupabase();
       if (rows && rows.length > 0) {
         setProjects((prev) => {
-          const merged = mergeProjectsWithSupabase(prev, rows);
+          const currentArc = readStorage<ArchivedRecord[]>(STORAGE_KEYS.ARCHIVED_RECORDS, []);
+          const deletedIds = readStorage<string[]>(STORAGE_KEYS.DELETED_PROJECT_IDS, []);
+          const merged = mergeProjectsWithSupabase(prev, rows, currentArc, deletedIds);
           writeStorage(STORAGE_KEYS.PROJECTS, merged);
           return merged;
         });
@@ -809,27 +991,50 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Fetch Supabase projects on mount and whenever sync event occurs
+  // Fetch Supabase data on mount and listen for real-time changes
   useEffect(() => {
     refreshProjectsFromSupabase();
+    refreshSystemConfigFromSupabase();
 
-    const handleSync = () => {
+    const handleSync = (e: any) => {
+      const action = e?.detail?.action;
+      if (['SAVE_SOCIAL_LINKS', 'CHANGE_ADMIN_PASSWORD', 'SAVE_SETTINGS'].includes(action)) {
+        refreshSystemConfigFromSupabase();
+        return;
+      }
+      // Do not refetch and potentially clobber local authoritative state immediately after project actions
+      if (['ADD_PROJECT', 'UPDATE_PROJECT', 'ARCHIVE_PROJECT'].includes(action)) {
+        return;
+      }
       refreshProjectsFromSupabase();
     };
     window.addEventListener(SYNC_EVENT_NAME, handleSync);
 
-    // Setup Supabase Realtime channel if available
+    // Setup Supabase Realtime channels if available
     const sb = getSupabase();
-    let channel: any = null;
+    let projectChannel: any = null;
+    let systemChannel: any = null;
+
     if (sb) {
       try {
-        channel = sb
+        projectChannel = sb
           .channel('public:portfolio_projects')
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'portfolio_projects' },
             () => {
               refreshProjectsFromSupabase();
+            }
+          )
+          .subscribe();
+
+        systemChannel = sb
+          .channel('public:system_configuration')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'system_configuration' },
+            () => {
+              refreshSystemConfigFromSupabase();
             }
           )
           .subscribe();
@@ -840,13 +1045,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     return () => {
       window.removeEventListener(SYNC_EVENT_NAME, handleSync);
-      if (sb && channel) {
-        try {
-          sb.removeChannel(channel);
-        } catch {}
+      if (sb) {
+        if (projectChannel) {
+          try { sb.removeChannel(projectChannel); } catch {}
+        }
+        if (systemChannel) {
+          try { sb.removeChannel(systemChannel); } catch {}
+        }
       }
     };
-  }, [refreshProjectsFromSupabase]);
+  }, [refreshProjectsFromSupabase, refreshSystemConfigFromSupabase]);
 
   // -------------------------------------------------------------
   // LEADS ACTIONS
@@ -1060,6 +1268,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       publishedDate: newProj.publishedDate || new Date().toISOString().split('T')[0]
     };
 
+    // Ensure new project isn't blocked by previous deletion tombstone
+    const deletedIds = readStorage<string[]>(STORAGE_KEYS.DELETED_PROJECT_IDS, []);
+    const pCode = (project.projectCode || '').toLowerCase();
+    const pId = (project.id || '').toLowerCase();
+    const cleanedDeleted = deletedIds.filter(
+      (id) => id.toLowerCase() !== pCode && id.toLowerCase() !== pId
+    );
+    writeStorage(STORAGE_KEYS.DELETED_PROJECT_IDS, cleanedDeleted);
+
     setProjects((prev) => {
       const updated = [project, ...prev];
       writeStorage(STORAGE_KEYS.PROJECTS, updated);
@@ -1087,7 +1304,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       annual_generation: project.annualGeneration,
       installation_duration: project.duration,
       image_url: project.image,
-      project_summary: project.summary
+      gallery_images: project.galleryImages,
+      project_summary: project.summary,
+      project_highlights: project.highlights,
+      published_date: project.publishedDate
     });
 
     return project;
@@ -1095,7 +1315,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateProject = useCallback((projectId: string, updated: Partial<ProjectItem>) => {
     setProjects((prev) => {
-      const updatedList = prev.map((p) => (p.id === projectId ? { ...p, ...updated } : p));
+      const updatedList = prev.map((p) => {
+        if (p.id === projectId || p.projectCode === projectId) {
+          const merged = { ...p, ...updated };
+          // Sync update to Supabase
+          syncProjectToSupabase({
+            project_id: merged.projectCode || merged.id,
+            project_display_name: merged.title,
+            asset_segment: merged.segment,
+            geographical_location: merged.location,
+            lead_token: merged.leadToken,
+            client_full_name: merged.clientFullName || merged.clientName,
+            status: merged.status,
+            property_type: merged.propertyType || merged.segment,
+            primary_contact_endpoint: merged.primaryContactEndpoint,
+            requested_configuration: merged.requestedConfiguration || merged.details,
+            monthly_usage: merged.monthlyUsage,
+            philippine_sub_region: merged.philippineSubRegion || merged.location,
+            system_capacity: merged.capacity,
+            inverter_brand: merged.inverterBrand,
+            panel_wattage: merged.panelWattage,
+            annual_generation: merged.annualGeneration,
+            installation_duration: merged.duration,
+            image_url: merged.image,
+            gallery_images: merged.galleryImages,
+            project_summary: merged.summary,
+            project_highlights: merged.highlights,
+            published_date: merged.publishedDate
+          });
+          return merged;
+        }
+        return p;
+      });
       writeStorage(STORAGE_KEYS.PROJECTS, updatedList);
       return updatedList;
     });
@@ -1104,42 +1355,59 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const archiveProject = useCallback((projectId: string) => {
     setProjects((prev) => {
-      const proj = prev.find((p) => p.id === projectId);
+      const proj = prev.find((p) => p.id === projectId || p.projectCode === projectId);
       if (proj) {
         const d = new Date();
         const dateStr = d.toISOString().split('T')[0];
         const timeStr = `${d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
 
+        const arcCode = `ARC-206-${Math.floor(100 + Math.random() * 900)}`;
+
+        // Remember deleted/archived IDs to prevent resurrection from Supabase sync
+        const currentDeleted = readStorage<string[]>(STORAGE_KEYS.DELETED_PROJECT_IDS, []);
+        const toAdd = [proj.id, proj.projectCode, proj.projectId].filter(Boolean) as string[];
+        const updatedDeleted = Array.from(new Set([...currentDeleted, ...toAdd]));
+        writeStorage(STORAGE_KEYS.DELETED_PROJECT_IDS, updatedDeleted);
+
+        const newArcRecord: ArchivedRecord = {
+          id: `arc-${Date.now()}`,
+          archiveCode: arcCode,
+          type: 'Portfolio Project',
+          originalStream: 'Portfolio Projects',
+          title: `${proj.title} (${proj.capacity})`,
+          subtitle: `${proj.segment} • ${proj.location}`,
+          archivedDate: dateStr,
+          deletedDateTime: timeStr,
+          reason: '',
+          originalId: proj.id,
+          originalProjectCode: proj.projectCode,
+          originalData: proj
+        };
+
         setArchivedRecords((arcPrev) => {
-          const updatedArc: ArchivedRecord[] = [
-            {
-              id: `arc-${Date.now()}`,
-              archiveCode: `ARC-206-${Math.floor(100 + Math.random() * 900)}`,
-              type: 'Portfolio Project',
-              originalStream: 'Portfolio Projects',
-              title: `${proj.title} (${proj.capacity})`,
-              subtitle: `${proj.segment} • ${proj.location}`,
-              archivedDate: dateStr,
-              deletedDateTime: timeStr,
-              reason: ''
-            },
-            ...arcPrev
-          ];
+          const updatedArc = [newArcRecord, ...arcPrev];
           writeStorage(STORAGE_KEYS.ARCHIVED_RECORDS, updatedArc);
-
-          syncArchiveRecordToSupabase({
-            archived_item_id: updatedArc[0].archiveCode || updatedArc[0].id,
-            original_stream_source: updatedArc[0].originalStream,
-            entity_label_name: updatedArc[0].title,
-            deleted_date_time: new Date().toISOString(),
-            entity_subtitle: updatedArc[0].subtitle,
-            deletion_reason: updatedArc[0].reason
-          });
-
           return updatedArc;
         });
+
+        // Sync archive record to Supabase archive_trash table
+        syncArchiveRecordToSupabase({
+          archived_item_id: arcCode,
+          original_stream_source: 'Portfolio Projects',
+          entity_label_name: newArcRecord.title,
+          deleted_date_time: new Date().toISOString(),
+          entity_subtitle: newArcRecord.subtitle,
+          deletion_reason: newArcRecord.reason
+        });
+
+        // CRITICAL FIX: Delete the project from Supabase portfolio_projects table so it doesn't resurrect
+        deleteProjectFromSupabase(proj.projectCode || proj.id);
+        if (proj.id && proj.id !== proj.projectCode) {
+          deleteProjectFromSupabase(proj.id);
+        }
       }
-      const updatedList = prev.filter((p) => p.id !== projectId);
+
+      const updatedList = prev.filter((p) => p.id !== projectId && p.projectCode !== projectId);
       writeStorage(STORAGE_KEYS.PROJECTS, updatedList);
       return updatedList;
     });
@@ -1176,34 +1444,81 @@ export function DataProvider({ children }: { children: ReactNode }) {
           return updatedLeads;
         });
       } else if (rec.originalStream === 'Portfolio Projects' || rec.type === 'Portfolio Project' || rec.type === 'Portfolio Draft') {
-        const codeNum = Math.floor(10 + Math.random() * 90);
-        const restoredProj: ProjectItem = {
-          id: `proj-${Date.now()}`,
-          projectCode: `PROJ-206-${codeNum}`,
-          title: rec.title.split('(')[0].trim(),
-          subtitle: rec.subtitle || 'Restored project from archive',
-          category: 'Residential Hybrid',
-          segment: 'Residential',
-          location: rec.subtitle?.includes('•') ? rec.subtitle.split('•')[1].trim() : 'Cavite, Philippines',
-          details: 'Restored Installation',
-          image: 'https://images.unsplash.com/photo-1508873696983-2df5293cb32b?auto=format&fit=crop&w=1200&q=80',
-          galleryImages: [],
-          capacity: rec.title.includes('(') ? rec.title.split('(')[1].replace(')', '') : '10 kWp',
-          year: new Date().getFullYear().toString(),
-          duration: '2 Weeks',
-          inverterBrand: 'Smart Hybrid Inverter',
-          panelWattage: 'Tier-1 Mono PV Modules',
-          annualGeneration: '~14,000 kWh / Year',
-          summary: 'Solar array restored from archive vault.',
-          highlights: ['Restored installation record'],
-          status: 'Completed',
-          publishedDate: new Date().toISOString().split('T')[0]
-        };
+        // If original project data was preserved, restore it with complete images and details
+        let restoredProj: ProjectItem;
+        if (rec.originalData && rec.originalData.title) {
+          restoredProj = {
+            ...rec.originalData,
+            status: 'Completed'
+          };
+        } else {
+          const codeNum = Math.floor(10 + Math.random() * 90);
+          restoredProj = {
+            id: `proj-${Date.now()}`,
+            projectCode: rec.originalProjectCode || `PROJ-206-${codeNum}`,
+            title: rec.title.split('(')[0].trim(),
+            subtitle: rec.subtitle || 'Restored project from archive',
+            category: 'Residential Hybrid',
+            segment: 'Residential',
+            location: rec.subtitle?.includes('•') ? rec.subtitle.split('•')[1].trim() : 'Cavite, Philippines',
+            details: 'Restored Installation',
+            image: 'https://images.unsplash.com/photo-1508873696983-2df5293cb32b?auto=format&fit=crop&w=1200&q=80',
+            galleryImages: [],
+            capacity: rec.title.includes('(') ? rec.title.split('(')[1].replace(')', '') : '10 kWp',
+            year: new Date().getFullYear().toString(),
+            duration: '2 Weeks',
+            inverterBrand: 'Smart Hybrid Inverter',
+            panelWattage: 'Tier-1 Mono PV Modules',
+            annualGeneration: '~14,000 kWh / Year',
+            summary: 'Solar array restored from archive vault.',
+            highlights: ['Restored installation record'],
+            status: 'Completed',
+            publishedDate: new Date().toISOString().split('T')[0]
+          };
+        }
+
+        // Unban the restored project ID from tombstone list
+        const deletedIds = readStorage<string[]>(STORAGE_KEYS.DELETED_PROJECT_IDS, []);
+        const toClean = [restoredProj.id, restoredProj.projectCode, rec.originalId, rec.originalProjectCode]
+          .filter(Boolean)
+          .map((s) => s!.toLowerCase());
+        const cleanedDeleted = deletedIds.filter((id) => !toClean.includes(id.toLowerCase()));
+        writeStorage(STORAGE_KEYS.DELETED_PROJECT_IDS, cleanedDeleted);
+
         setProjects((projPrev) => {
           const updatedProjects = [restoredProj, ...projPrev];
           writeStorage(STORAGE_KEYS.PROJECTS, updatedProjects);
           return updatedProjects;
         });
+
+        // Sync restored project back to Supabase portfolio_projects
+        syncProjectToSupabase({
+          project_id: restoredProj.projectCode || restoredProj.id,
+          project_display_name: restoredProj.title,
+          asset_segment: restoredProj.segment,
+          geographical_location: restoredProj.location,
+          lead_token: restoredProj.leadToken,
+          client_full_name: restoredProj.clientFullName || restoredProj.clientName,
+          status: restoredProj.status,
+          property_type: restoredProj.propertyType || restoredProj.segment,
+          primary_contact_endpoint: restoredProj.primaryContactEndpoint,
+          requested_configuration: restoredProj.requestedConfiguration || restoredProj.details,
+          monthly_usage: restoredProj.monthlyUsage,
+          philippine_sub_region: restoredProj.philippineSubRegion || restoredProj.location,
+          system_capacity: restoredProj.capacity,
+          inverter_brand: restoredProj.inverterBrand,
+          panel_wattage: restoredProj.panelWattage,
+          annual_generation: restoredProj.annualGeneration,
+          installation_duration: restoredProj.duration,
+          image_url: restoredProj.image,
+          gallery_images: restoredProj.galleryImages,
+          project_summary: restoredProj.summary,
+          project_highlights: restoredProj.highlights,
+          published_date: restoredProj.publishedDate
+        });
+
+        // Remove from Supabase archive_trash
+        deleteArchiveRecordFromSupabase(rec.archiveCode || rec.id);
       }
 
       const updatedArc = arcPrev.filter((r) => r.id !== recordId);
@@ -1215,6 +1530,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const deletePermanently = useCallback((recordId: string) => {
     setArchivedRecords((prev) => {
+      const rec = prev.find((r) => r.id === recordId);
+      if (rec) {
+        // Delete from Supabase archive_trash
+        deleteArchiveRecordFromSupabase(rec.archiveCode || rec.id);
+        // Also ensure deleted from Supabase portfolio_projects
+        if (rec.originalProjectCode) {
+          deleteProjectFromSupabase(rec.originalProjectCode);
+        }
+        if (rec.originalId) {
+          deleteProjectFromSupabase(rec.originalId);
+        }
+      }
       const updated = prev.filter((r) => r.id !== recordId);
       writeStorage(STORAGE_KEYS.ARCHIVED_RECORDS, updated);
       return updated;
@@ -1228,6 +1555,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const bulkPermanentDelete = useCallback((recordIds: string[]) => {
     setArchivedRecords((prev) => {
+      const toDelete = prev.filter((r) => recordIds.includes(r.id));
+      toDelete.forEach((rec) => {
+        deleteArchiveRecordFromSupabase(rec.archiveCode || rec.id);
+        if (rec.originalProjectCode) {
+          deleteProjectFromSupabase(rec.originalProjectCode);
+        }
+        if (rec.originalId) {
+          deleteProjectFromSupabase(rec.originalId);
+        }
+      });
       const updated = prev.filter((r) => !recordIds.includes(r.id));
       writeStorage(STORAGE_KEYS.ARCHIVED_RECORDS, updated);
       return updated;
@@ -1236,7 +1573,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const purgeAllArchive = useCallback(() => {
-    setArchivedRecords([]);
+    setArchivedRecords((prev) => {
+      prev.forEach((rec) => {
+        deleteArchiveRecordFromSupabase(rec.archiveCode || rec.id);
+        if (rec.originalProjectCode) {
+          deleteProjectFromSupabase(rec.originalProjectCode);
+        }
+        if (rec.originalId) {
+          deleteProjectFromSupabase(rec.originalId);
+        }
+      });
+      return [];
+    });
     writeStorage(STORAGE_KEYS.ARCHIVED_RECORDS, []);
     dispatchSyncEvent('PURGE_ARCHIVE');
   }, []);
@@ -1266,67 +1614,93 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // -------------------------------------------------------------
   // SYSTEM CONFIGURATION
   // -------------------------------------------------------------
-  const saveSettings = useCallback((newSettings: OperationalSettingsConfig) => {
+  const saveSettings = useCallback(async (newSettings: OperationalSettingsConfig) => {
     setSettings(newSettings);
     writeStorage(STORAGE_KEYS.SETTINGS, newSettings);
     dispatchSyncEvent('SAVE_SETTINGS', newSettings);
-    saveSystemConfigSupabase('operational_settings', newSettings as unknown as Record<string, unknown>);
+    await saveSystemConfigSupabase(
+      'operational_settings',
+      newSettings as unknown as Record<string, unknown>,
+      'Operational Settings'
+    );
   }, []);
 
-  const saveSocialLinks = useCallback((newLinks: SocialLinksConfig) => {
+  const saveSocialLinks = useCallback(async (newLinks: SocialLinksConfig) => {
     setSocialLinks(newLinks);
     writeStorage(STORAGE_KEYS.SOCIAL_LINKS, newLinks);
     dispatchSyncEvent('SAVE_SOCIAL_LINKS', newLinks);
-    saveSystemConfigSupabase('integrated_urls_channels', newLinks as unknown as Record<string, unknown>);
+    await saveSystemConfigSupabase(
+      'integrated_urls_channels',
+      newLinks as unknown as Record<string, unknown>,
+      'Integrated URLs & Channels'
+    );
   }, []);
 
   // -------------------------------------------------------------
-  // ADMINISTRATIVE SECURITY & PASSWORD ACTIONS
+  // ADMINISTRATIVE SECURITY & SUPABASE AUTHORIZATION ACTIONS
   // -------------------------------------------------------------
-  const verifyAdminPassword = useCallback((pass: string): boolean => {
-    return pass.trim() === adminPassword.trim();
-  }, [adminPassword]);
-
-  const changeAdminPassword = useCallback((oldPass: string, newPass: string): { success: boolean; message: string } => {
-    if (oldPass.trim() !== adminPassword.trim()) {
-      return {
-        success: false,
-        message: 'Current password does not match your active administrative credentials.'
-      };
+  const loginAdminWithSupabase = useCallback(async (
+    email: string,
+    pass: string
+  ): Promise<{ success: boolean; error?: string; user?: User }> => {
+    const res = await signInWithSupabaseAuth(email, pass);
+    if (res.success && res.user) {
+      setAdminUser(res.user);
+      setIsAdminAuthenticated(true);
+      writeStorage(STORAGE_KEYS.ADMIN_AUTH_SESSION, true);
+      dispatchSyncEvent('LOGIN_ADMIN', true);
+      return { success: true, user: res.user };
     }
+    return {
+      success: false,
+      error: res.error || 'Authentication failed. Please verify your credentials.'
+    };
+  }, []);
+
+  const changeAdminPassword = useCallback(async (
+    _oldPass: string,
+    newPass: string
+  ): Promise<{ success: boolean; message: string }> => {
     if (newPass.trim().length < 6) {
       return {
         success: false,
         message: 'New password must be at least 6 characters in length.'
       };
     }
-    const sanitized = newPass.trim();
-    setAdminPassword(sanitized);
-    writeStorage(STORAGE_KEYS.ADMIN_PASSWORD, sanitized);
-    dispatchSyncEvent('CHANGE_ADMIN_PASSWORD', sanitized);
 
-    saveSystemConfigSupabase('admin_credentials', {
-      password_hash: sanitized,
-      last_updated: new Date().toISOString(),
-      role: 'Super Admin'
-    });
+    const res = await updateSupabaseUserPassword(newPass);
+    if (!res.success) {
+      return {
+        success: false,
+        message: res.error || 'Failed to update administrative password in Supabase Authorization.'
+      };
+    }
 
     return {
       success: true,
-      message: 'Administrative password updated successfully.'
+      message: 'Administrative password updated successfully in Supabase Authorization.'
     };
-  }, [adminPassword]);
+  }, []);
 
-  const loginAdmin = useCallback(() => {
+  const resetAdminPasswordWithSupabase = useCallback(async (
+    email: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    return await resetSupabasePasswordForEmail(email);
+  }, []);
+
+  const loginAdmin = useCallback((user?: User) => {
     setIsAdminAuthenticated(true);
+    if (user) setAdminUser(user);
     writeStorage(STORAGE_KEYS.ADMIN_AUTH_SESSION, true);
     dispatchSyncEvent('LOGIN_ADMIN', true);
   }, []);
 
-  const logoutAdmin = useCallback(() => {
+  const logoutAdmin = useCallback(async () => {
     setIsAdminAuthenticated(false);
+    setAdminUser(null);
     writeStorage(STORAGE_KEYS.ADMIN_AUTH_SESSION, false);
     dispatchSyncEvent('LOGOUT_ADMIN', false);
+    await signOutSupabaseAuth();
   }, []);
 
   // -------------------------------------------------------------
@@ -1500,11 +1874,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       saveSettings,
       saveSocialLinks,
+      refreshSystemConfigFromSupabase,
 
-      adminPassword,
+      adminUser,
       isAdminAuthenticated,
-      verifyAdminPassword,
+      loginAdminWithSupabase,
       changeAdminPassword,
+      resetAdminPasswordWithSupabase,
       loginAdmin,
       logoutAdmin,
 
@@ -1540,10 +1916,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addOcularTrip,
       saveSettings,
       saveSocialLinks,
-      adminPassword,
+      refreshSystemConfigFromSupabase,
+      adminUser,
       isAdminAuthenticated,
-      verifyAdminPassword,
+      loginAdminWithSupabase,
       changeAdminPassword,
+      resetAdminPasswordWithSupabase,
       loginAdmin,
       logoutAdmin,
       dismissAlert,

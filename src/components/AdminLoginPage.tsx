@@ -20,13 +20,14 @@ import {
 import { SOLAREIGN_LOGO_URL } from './SolareignLogo';
 import AdminDashboard from './AdminDashboard';
 import { useSolareignData } from '../context/DataContext';
+import { isSupabaseConfigured, getSupabaseUrl, getSupabaseAnonKey } from '../lib/supabase';
 
 interface AdminLoginPageProps {
   onBackToHome: () => void;
 }
 
 export default function AdminLoginPage({ onBackToHome }: AdminLoginPageProps) {
-  const { adminPassword, verifyAdminPassword, isAdminAuthenticated, loginAdmin, logoutAdmin } = useSolareignData();
+  const { loginAdminWithSupabase, resetAdminPasswordWithSupabase, isAdminAuthenticated, logoutAdmin } = useSolareignData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -34,8 +35,17 @@ export default function AdminLoginPage({ onBackToHome }: AdminLoginPageProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   const [forgotEmailSent, setForgotEmailSent] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
 
-  const handleSubmit = (e: FormEvent) => {
+  // Supabase Configuration drawer if not configured
+  const [showConfigDrawer, setShowConfigDrawer] = useState(false);
+  const [customUrl, setCustomUrl] = useState(getSupabaseUrl());
+  const [customAnonKey, setCustomAnonKey] = useState(getSupabaseAnonKey());
+  const [configSaved, setConfigSaved] = useState(false);
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -51,15 +61,17 @@ export default function AdminLoginPage({ onBackToHome }: AdminLoginPageProps) {
 
     setIsLoading(true);
 
-    // Verify against real active administrative password
-    setTimeout(() => {
+    try {
+      const res = await loginAdminWithSupabase(email, password);
       setIsLoading(false);
-      if (verifyAdminPassword(password)) {
-        loginAdmin();
-      } else {
-        setErrorMessage('Invalid administrative password. If you recently changed your password in System Settings, please use your updated credentials.');
+      if (!res.success) {
+        setErrorMessage(res.error || 'Authentication failed. Please verify your Supabase email and password.');
       }
-    }, 450);
+    } catch (err: unknown) {
+      setIsLoading(false);
+      const msg = err instanceof Error ? err.message : 'An error occurred during Supabase authorization.';
+      setErrorMessage(msg);
+    }
   };
 
   const handleLogout = () => {
@@ -68,9 +80,41 @@ export default function AdminLoginPage({ onBackToHome }: AdminLoginPageProps) {
     setErrorMessage(null);
   };
 
-  const handleSendResetLink = (e: FormEvent) => {
+  const handleSendResetLink = async (e: FormEvent) => {
     e.preventDefault();
-    setForgotEmailSent(true);
+    setForgotError(null);
+    const targetEmail = forgotEmail.trim() || email.trim();
+    if (!targetEmail) {
+      setForgotError('Please enter a valid email address.');
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const res = await resetAdminPasswordWithSupabase(targetEmail);
+      setForgotLoading(false);
+      if (res.success) {
+        setForgotEmailSent(true);
+      } else {
+        setForgotError(res.error || 'Failed to send password recovery email through Supabase Auth.');
+      }
+    } catch (err: unknown) {
+      setForgotLoading(false);
+      const msg = err instanceof Error ? err.message : 'Failed to send reset link.';
+      setForgotError(msg);
+    }
+  };
+
+  const handleSaveCustomSupabaseConfig = (e: FormEvent) => {
+    e.preventDefault();
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('solareign_supabase_url', customUrl.trim());
+      localStorage.setItem('solareign_supabase_anon_key', customAnonKey.trim());
+      setConfigSaved(true);
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    }
   };
 
   return (
@@ -166,10 +210,75 @@ export default function AdminLoginPage({ onBackToHome }: AdminLoginPageProps) {
                 <h2 className="text-3xl sm:text-4xl font-black text-[#0F5A29] tracking-tight font-sans">
                   SIGN IN
                 </h2>
-                <p className="text-xs font-bold tracking-widest text-slate-400 uppercase mt-2">
-                  ACCESS CONTROL TERMINAL GATEWAY
+                <p className="text-xs font-bold tracking-widest text-slate-400 uppercase mt-2 flex items-center gap-2">
+                  <span>SUPABASE AUTHORIZATION GATEWAY</span>
+                  {isSupabaseConfigured() ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      CONNECTED
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowConfigDrawer(!showConfigDrawer)}
+                      className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold hover:bg-amber-100 transition-colors"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      SETUP SUPABASE
+                    </button>
+                  )}
                 </p>
               </div>
+
+              {/* Supabase Connection Setup Box (if triggered or not configured) */}
+              {showConfigDrawer && (
+                <div className="mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs animate-in fade-in">
+                  <div className="font-bold text-slate-800 uppercase tracking-wide mb-2 flex items-center justify-between">
+                    <span>Supabase Project Credentials</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowConfigDrawer(false)}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <form onSubmit={handleSaveCustomSupabaseConfig} className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Supabase Project URL
+                      </label>
+                      <input
+                        type="url"
+                        value={customUrl}
+                        onChange={(e) => setCustomUrl(e.target.value)}
+                        placeholder="https://xyzcompany.supabase.co"
+                        required
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Supabase Anon Key
+                      </label>
+                      <input
+                        type="text"
+                        value={customAnonKey}
+                        onChange={(e) => setCustomAnonKey(e.target.value)}
+                        placeholder="eyJhbGciOiJIUzI1NiIsIn..."
+                        required
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-[#0F5A29] hover:bg-[#0c4720] text-white font-bold rounded-lg uppercase tracking-wider text-[11px]"
+                    >
+                      {configSaved ? 'Saved! Reloading...' : 'Save & Connect Supabase'}
+                    </button>
+                  </form>
+                </div>
+              )}
 
               {/* Error Notification */}
               {errorMessage && (
@@ -297,14 +406,21 @@ export default function AdminLoginPage({ onBackToHome }: AdminLoginPageProps) {
               Enter your corporate Solareign email address. Our systems engineering dispatcher will send an authorization token for password re-verification.
             </p>
 
+            {forgotError && (
+              <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <span>{forgotError}</span>
+              </div>
+            )}
+
             {forgotEmailSent ? (
               <div className="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs space-y-2">
                 <div className="font-bold flex items-center gap-1.5 text-sm text-[#0F5A29]">
                   <CheckCircle2 className="w-4 h-4 text-[#88D628]" />
-                  Dispatch Notice Sent
+                  Supabase Recovery Email Dispatched
                 </div>
                 <p>
-                  A temporary security link has been sent to your Solareign address. Please check your inbox or contact the IT desk at <span className="font-semibold">solareignpower09@gmail.com</span>.
+                  A password reset link has been dispatched to your email address from Supabase Authorization. Please check your inbox and spam folder.
                 </p>
                 <div className="pt-2">
                   <button
@@ -312,8 +428,9 @@ export default function AdminLoginPage({ onBackToHome }: AdminLoginPageProps) {
                     onClick={() => {
                       setForgotPasswordOpen(false);
                       setForgotEmailSent(false);
+                      setForgotError(null);
                     }}
-                    className="w-full py-2.5 rounded-lg bg-[#0F5A29] text-white font-bold text-xs uppercase tracking-wider"
+                    className="w-full py-2.5 rounded-lg bg-[#0F5A29] text-white font-bold text-xs uppercase tracking-wider cursor-pointer"
                   >
                     Done
                   </button>
@@ -327,18 +444,27 @@ export default function AdminLoginPage({ onBackToHome }: AdminLoginPageProps) {
                   </label>
                   <input
                     type="email"
-                    defaultValue={email || 'admin@solareign.ph'}
+                    value={forgotEmail || email}
+                    onChange={(e) => setForgotEmail(e.target.value)}
                     required
-                    placeholder="name@solareign.ph"
+                    placeholder="admin@solareign.ph"
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#88D628] focus:border-[#0F5A29]"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3.5 px-4 rounded-xl bg-[#0F5A29] hover:bg-[#0c4720] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  disabled={forgotLoading}
+                  className="w-full py-3.5 px-4 rounded-xl bg-[#0F5A29] hover:bg-[#0c4720] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
                 >
-                  Send Recovery Link
+                  {forgotLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-[#88D628]" />
+                      <span>Sending Supabase Recovery Email...</span>
+                    </>
+                  ) : (
+                    <span>Send Recovery Link</span>
+                  )}
                 </button>
               </form>
             )}

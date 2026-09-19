@@ -168,3 +168,31 @@ h2.rich-heading-2 {
   color-scheme: dark;
 }
 
+/* Continuous Logo Marquee Animations */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-scroll {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll 42s linear infinite;
+}
+
+.animate-marquee-scroll:hover,
+.group-marquee:hover .animate-marquee-scroll {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-scroll {
+    animation-duration: 90s;
+  }
+}
+

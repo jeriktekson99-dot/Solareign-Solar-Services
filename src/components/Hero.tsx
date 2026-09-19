@@ -30,7 +30,10 @@ const SATISFIED_CLIENT_AVATARS = [
 
 export default function Hero({ onContactClick, onExploreClick }: HeroProps) {
   const { settings } = useSolareignData();
-  const hotlinePhone = settings.hotline || '0908 145 4906';
+  const rawHotline = settings.hotline;
+  const hotlinePhone = (!rawHotline || rawHotline.includes('843') || rawHotline.includes('+63'))
+    ? '0908 145 4906'
+    : rawHotline;
   const cleanPhone = hotlinePhone.replace(/\s+/g, '');
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -163,7 +166,7 @@ export default function Hero({ onContactClick, onExploreClick }: HeroProps) {
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-300">
-                  Join <span className="text-white font-bold">50+ homes</span>.
+                  Join <span className="text-white font-bold">100+ homes</span>.
                 </p>
               </div>
             </div>

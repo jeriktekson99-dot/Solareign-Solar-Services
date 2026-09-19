@@ -220,12 +220,20 @@ export default function Footer({ onNavigate, onGetQuotation }: FooterProps) {
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   COMPANY NUMBER
                 </div>
-                <a
-                  href={`tel:${(settings.hotline || '09081454906').replace(/\s+/g, '')}`}
-                  className="text-slate-800 hover:text-[#0F5A29] transition-colors mt-1 block font-medium"
-                >
-                  {settings.hotline || '0908 145 4906'}
-                </a>
+                {(() => {
+                  const rawHotline = settings.hotline;
+                  const displayHotline = (!rawHotline || rawHotline.includes('843') || rawHotline.includes('+63'))
+                    ? '0908 145 4906'
+                    : rawHotline;
+                  return (
+                    <a
+                      href={`tel:${displayHotline.replace(/\s+/g, '')}`}
+                      className="text-slate-800 hover:text-[#0F5A29] transition-colors mt-1 block font-medium"
+                    >
+                      {displayHotline}
+                    </a>
+                  );
+                })()}
               </div>
 
               {/* Company Email */}

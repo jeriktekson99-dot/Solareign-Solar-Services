@@ -295,8 +295,9 @@ export async function uploadImageWithCompression(
   // 2. Upload to Supabase Storage Bucket if client is configured
   if (isSupabaseConfigured()) {
     const timestamp = Date.now();
-    const cleanBaseName = sanitizeStorageFileName(file.name.replace(/\.[^/.]+$/, ''));
-    const destination = `${folder}/${timestamp}-${cleanBaseName}.jpg`;
+    const entropy = Math.random().toString(36).substring(2, 9);
+    const cleanBaseName = sanitizeStorageFileName(file.name.replace(/\.[^/.]+$/, '')) || 'image';
+    const destination = `${folder}/${timestamp}-${entropy}-${cleanBaseName}.jpg`;
 
     const uploaded = await uploadToStorageBucket(compressed.blob, destination, bucketName);
     if (uploaded) {

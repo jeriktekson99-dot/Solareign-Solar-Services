@@ -1,4 +1,6 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
+
+export type { User, Session };
 
 // ============================================================================
 // SUPABASE CLIENT INITIALIZATION & TYPED ACCESSORS
@@ -184,6 +186,26 @@ export async function fetchSystemConfigSupabase<T>(configKey: string, fallback: 
   }
 }
 
+export async function fetchAllSystemConfigSupabase(): Promise<Record<string, any> | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb
+      .from('system_configuration')
+      .select('config_key, config_value');
+    if (error || !data) return null;
+    const configMap: Record<string, any> = {};
+    for (const row of data) {
+      if (row.config_key) {
+        configMap[row.config_key] = row.config_value;
+      }
+    }
+    return configMap;
+  } catch {
+    return null;
+  }
+}
+
 export async function saveSystemConfigSupabase(
   configKey: string,
   configValue: Record<string, unknown>,
@@ -276,8 +298,19 @@ export async function syncProjectToSupabase(project: Partial<PortfolioProjectRow
   if (!sb || !project.project_id) return true;
   try {
     const { error } = await sb.from('portfolio_projects').upsert(project, { onConflict: 'project_id' });
-    return !error;
-  } catch {
+    if (error) {
+      console.warn('[Supabase] Error upserting portfolio_projects:', error.message);
+      // In case gallery_images column is missing or type mismatched, retry without it to ensure basic sync succeeds
+      if (error.message?.includes('gallery_images') || error.code === '42703') {
+        const { gallery_images, ...fallbackData } = project;
+        const retryRes = await sb.from('portfolio_projects').upsert(fallbackData, { onConflict: 'project_id' });
+        return !retryRes.error;
+      }
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Exception syncing project:', err);
     return false;
   }
 }
@@ -292,6 +325,54 @@ export async function syncArchiveRecordToSupabase(rec: Partial<ArchiveTrashRow>)
     const { error } = await sb.from('archive_trash').upsert(rec, { onConflict: 'archived_item_id' });
     return !error;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * Delete a portfolio project from Supabase portfolio_projects table
+ */
+export async function deleteProjectFromSupabase(projectIdOrCode: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !projectIdOrCode) return true;
+  try {
+    const { error: err1 } = await sb
+      .from('portfolio_projects')
+      .delete()
+      .eq('project_id', projectIdOrCode);
+
+    const { error: err2 } = await sb
+      .from('portfolio_projects')
+      .delete()
+      .eq('id', projectIdOrCode);
+
+    return !err1 || !err2;
+  } catch (err) {
+    console.warn('[Supabase] Failed to delete portfolio project:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete an archive record from Supabase archive_trash table
+ */
+export async function deleteArchiveRecordFromSupabase(archiveIdOrCode: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !archiveIdOrCode) return true;
+  try {
+    const { error: err1 } = await sb
+      .from('archive_trash')
+      .delete()
+      .eq('archived_item_id', archiveIdOrCode);
+
+    const { error: err2 } = await sb
+      .from('archive_trash')
+      .delete()
+      .eq('id', archiveIdOrCode);
+
+    return !err1 || !err2;
+  } catch (err) {
+    console.warn('[Supabase] Failed to delete archive record:', err);
     return false;
   }
 }
@@ -402,4 +483,156 @@ export async function checkStorageBucketStatus(
     };
   }
 }
+
+// ============================================================================
+// SUPABASE AUTHENTICATION & AUTHORIZATION HELPERS
+// ============================================================================
+
+/**
+ * Sign in admin user using Supabase Auth (Authorization)
+ */
+export async function signInWithSupabaseAuth(
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: User; session?: Session; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    return {
+      success: false,
+      error: 'Supabase project is not connected. Please verify your Supabase configuration in environment variables or storage.'
+    };
+  }
+
+  const sb = getSupabase();
+  if (!sb) {
+    return {
+      success: false,
+      error: 'Supabase client could not be initialized.'
+    };
+  }
+
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({
+      email: email.trim(),
+      password: password.trim()
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message || 'Authentication failed. Please check your Supabase credentials.'
+      };
+    }
+
+    if (!data.user) {
+      return {
+        success: false,
+        error: 'No user record returned from Supabase.'
+      };
+    }
+
+    return {
+      success: true,
+      user: data.user,
+      session: data.session || undefined
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'An unexpected error occurred during authentication.';
+    return {
+      success: false,
+      error: msg
+    };
+  }
+}
+
+/**
+ * Sign out current admin user from Supabase Auth
+ */
+export async function signOutSupabaseAuth(): Promise<{ success: boolean; error?: string }> {
+  const sb = getSupabase();
+  if (!sb) return { success: true };
+
+  try {
+    const { error } = await sb.auth.signOut();
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to sign out from Supabase.';
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Get active Supabase session
+ */
+export async function getSupabaseAuthSession(): Promise<Session | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  try {
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (error || !session) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Request password reset email via Supabase Auth
+ */
+export async function resetSupabasePasswordForEmail(
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  const sb = getSupabase();
+  if (!sb) {
+    return {
+      success: false,
+      error: 'Supabase is not configured.'
+    };
+  }
+
+  try {
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/?admin=true` : undefined
+    });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to send password reset request.';
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Update authenticated user's password in Supabase Auth
+ */
+export async function updateSupabaseUserPassword(
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  const sb = getSupabase();
+  if (!sb) {
+    return {
+      success: false,
+      error: 'Supabase is not configured.'
+    };
+  }
+
+  try {
+    const { error } = await sb.auth.updateUser({
+      password: newPassword.trim()
+    });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to update user password in Supabase.';
+    return { success: false, error: msg };
+  }
+}
+
 

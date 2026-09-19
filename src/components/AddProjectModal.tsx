@@ -94,12 +94,12 @@ export default function AddProjectModal({
     setIsCompressing(true);
     setCompressionStatus(`Compressing & uploading ${fileArray.length} image(s)...`);
     try {
-      const results = await Promise.all(
+      const settled = await Promise.allSettled(
         fileArray.map((f) =>
           uploadImageWithCompression(f, {
             folder: 'projects',
             maxDimension: 1280,
-            quality: 0.76
+            quality: 0.78
           })
         )
       );
@@ -107,27 +107,33 @@ export default function AddProjectModal({
       const newUrls: string[] = [];
       const newMeta: Record<string, ImageUploadMeta> = {};
 
-      results.forEach((res) => {
-        if (res.dataUrl) {
-          newUrls.push(res.dataUrl);
-          newMeta[res.dataUrl] = {
-            url: res.dataUrl,
-            name: res.name,
-            sizeBytes: res.sizeBytes,
-            originalSizeBytes: res.originalSizeBytes,
-            savingsPercent: res.savingsPercent,
-            isBucketUrl: res.isBucketUrl
+      settled.forEach((res) => {
+        if (res.status === 'fulfilled' && res.value?.dataUrl) {
+          const item = res.value;
+          newUrls.push(item.dataUrl);
+          newMeta[item.dataUrl] = {
+            url: item.dataUrl,
+            name: item.name,
+            sizeBytes: item.sizeBytes,
+            originalSizeBytes: item.originalSizeBytes,
+            savingsPercent: item.savingsPercent,
+            isBucketUrl: item.isBucketUrl
           };
         }
       });
 
-      setUploadedImages((prev) => [...prev, ...newUrls]);
-      setImagesMeta((prev) => ({ ...prev, ...newMeta }));
+      if (newUrls.length > 0) {
+        setUploadedImages((prev) => [...prev, ...newUrls]);
+        setImagesMeta((prev) => ({ ...prev, ...newMeta }));
+      }
     } catch (err) {
       console.warn('Error processing, compressing, and uploading images:', err);
     } finally {
       setIsCompressing(false);
       setCompressionStatus('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -363,7 +369,11 @@ export default function AddProjectModal({
                 ref={fileInputRef}
                 multiple
                 accept="image/*"
-                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFiles(e.target.files)}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                  handleFiles(e.target.files);
+                  e.target.value = '';
+                }}
                 className="hidden"
               />
 

@@ -201,8 +201,8 @@ export default function ProjectDetailsView({
                   : 'Project Setup Active Angle'}
               </div>
 
-              {/* Left and Right navigation symbols on main photo when images > 4 (no container, pure symbols) */}
-              {hasMoreThanFour && (
+              {/* Left and Right navigation symbols on main photo when images > 1 (no container, pure symbols) */}
+              {totalImages > 1 && (
                 <>
                   <button
                     type="button"
@@ -224,9 +224,9 @@ export default function ProjectDetailsView({
               )}
             </div>
 
-            {/* Bottom Row of 4 Cards Carousel with Overlaid Left/Right Chevrons matching reference layout */}
+            {/* Bottom Row of Cards Carousel with Overlaid Left/Right Chevrons */}
             <div className="relative w-full group/carousel select-none pt-1">
-              {availableImages.length > 1 && (
+              {hasMoreThanFour && (
                 <button
                   type="button"
                   onClick={handlePrevImage}
@@ -237,57 +237,52 @@ export default function ProjectDetailsView({
                 </button>
               )}
 
-              <div className="grid grid-cols-4 gap-2.5 sm:gap-3 w-full">
+              <div
+                className={`grid gap-2.5 sm:gap-3 w-full ${
+                  totalImages === 1
+                    ? 'grid-cols-1 max-w-[200px]'
+                    : totalImages === 2
+                    ? 'grid-cols-2 max-w-[420px]'
+                    : totalImages === 3
+                    ? 'grid-cols-3 max-w-[620px]'
+                    : 'grid-cols-4'
+                }`}
+              >
                 {(hasMoreThanFour
                   ? availableImages.slice(thumbnailStartIndex, thumbnailStartIndex + 4)
-                  : (availableImages.length > 0 ? availableImages : [0, 1, 2, 3])
-                ).map((item, sliceIdx) => {
+                  : availableImages
+                ).map((imgAtSlot, sliceIdx) => {
                   const realIdx = hasMoreThanFour
                     ? thumbnailStartIndex + sliceIdx
                     : sliceIdx;
-                  const imgAtSlot = typeof item === 'string' ? item : availableImages[realIdx];
                   const isSelected = realIdx === activeImageIndex;
 
                   return (
                     <button
                       key={realIdx}
                       type="button"
-                      onClick={() => {
-                        if (imgAtSlot) {
-                          setActiveImageIndex(realIdx);
-                        }
-                      }}
+                      onClick={() => setActiveImageIndex(realIdx)}
                       className={`relative aspect-[4/3] rounded-xl overflow-hidden border-2 transition-all cursor-pointer bg-slate-100 flex items-center justify-center ${
                         isSelected
                           ? 'border-[#88D628] ring-2 ring-[#0F5A29]/25 shadow-md scale-[1.02]'
                           : 'border-slate-200 hover:border-slate-400 opacity-85 hover:opacity-100'
                       }`}
                     >
-                      {imgAtSlot ? (
-                        <>
-                          <img
-                            src={imgAtSlot}
-                            alt={`Thumbnail Angle ${realIdx + 1}`}
-                            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-black/10 hover:bg-transparent transition-colors" />
-                          <span className="absolute bottom-1 left-1.5 text-[9px] font-mono font-bold text-white bg-black/60 px-1.5 py-0.5 rounded">
-                            Angle {realIdx + 1}
-                          </span>
-                        </>
-                      ) : (
-                        <div className="text-center p-1">
-                          <span className="text-[10px] font-mono font-bold text-slate-300 uppercase">
-                            Slot {realIdx + 1}
-                          </span>
-                        </div>
-                      )}
+                      <img
+                        src={imgAtSlot}
+                        alt={`Thumbnail Angle ${realIdx + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-black/10 hover:bg-transparent transition-colors" />
+                      <span className="absolute bottom-1 left-1.5 text-[9px] font-mono font-bold text-white bg-black/60 px-1.5 py-0.5 rounded">
+                        Angle {realIdx + 1}
+                      </span>
                     </button>
                   );
                 })}
               </div>
 
-              {availableImages.length > 1 && (
+              {hasMoreThanFour && (
                 <button
                   type="button"
                   onClick={handleNextImage}
