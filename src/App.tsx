@@ -8,6 +8,7 @@ import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import TermsOfUsePage from './components/TermsOfUsePage';
 import SafetyCompliancePage from './components/SafetyCompliancePage';
 import AdminLoginPage from './components/AdminLoginPage';
+import GetQuotationPage from './components/GetQuotationPage';
 import Hero from './components/Hero';
 import PartnerLogoMarquee from './components/PartnerLogoMarquee';
 import ProblemSolution from './components/ProblemSolution';
@@ -16,7 +17,6 @@ import Services from './components/Services';
 import Portfolio from './components/Portfolio';
 import WhyChooseUs from './components/WhyChooseUs';
 import Testimonials from './components/Testimonials';
-import FAQSection from './components/FAQSection';
 import ContactCTA from './components/ContactCTA';
 import Footer from './components/Footer';
 import ChatbotWidget from './components/ChatbotWidget';
@@ -66,7 +66,9 @@ function AppContent() {
   };
 
   const handleNavigate = (pageId: string) => {
-    if (pageId === 'portfolio') {
+    if (pageId === 'quotation') {
+      setActivePage('quotation');
+    } else if (pageId === 'portfolio') {
       setActivePage('portfolio');
     } else if (pageId === 'portfolio-details') {
       setActivePage('portfolio-details');
@@ -117,7 +119,11 @@ function AppContent() {
 
       {/* Main Content Area */}
       <main className="flex-grow">
-        {activePage === 'privacy' ? (
+        {activePage === 'quotation' ? (
+          <GetQuotationPage
+            onBackToHome={() => handleNavigate('home')}
+          />
+        ) : activePage === 'privacy' ? (
           <PrivacyPolicyPage
             onBackToHome={() => handleNavigate('home')}
             onConsultationClick={scrollToContact}
@@ -224,7 +230,6 @@ function AppContent() {
             />
             <WhyChooseUs onConsultClick={scrollToContact} />
             <Testimonials />
-            <FAQSection />
             <ContactCTA
               selectedServicePreset={selectedServicePreset}
               onExploreServices={() => handleNavigate('services')}

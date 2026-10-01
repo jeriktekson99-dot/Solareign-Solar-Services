@@ -19,15 +19,12 @@ export default function Footer({ onNavigate, onGetQuotation }: FooterProps) {
   const handleNavClick = (e: MouseEvent, target: string) => {
     e.preventDefault();
     if (target === 'quote') {
-      if (onGetQuotation) {
+      if (onNavigate) {
+        onNavigate('quotation');
+      } else if (onGetQuotation) {
         onGetQuotation();
       } else {
-        const el = document.getElementById('contact') || document.getElementById('home');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-        } else {
-          scrollToTop();
-        }
+        scrollToTop();
       }
       return;
     }
@@ -42,7 +39,9 @@ export default function Footer({ onNavigate, onGetQuotation }: FooterProps) {
         onNavigate('services');
       } else if (target === 'portfolio' || target === 'gallery') {
         onNavigate('portfolio');
-      } else if (target === 'why-choose-us' || target === 'faq') {
+      } else if (target === 'faq') {
+        onNavigate('quotation');
+      } else if (target === 'why-choose-us') {
         onNavigate('home');
         setTimeout(() => {
           const el = document.getElementById(target);

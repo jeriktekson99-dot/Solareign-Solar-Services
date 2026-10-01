@@ -55,19 +55,21 @@ export default function Navbar({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
           {/* Left: Solareign Solar Power Services logo */}
-          <button
-            onClick={(e) => handleLinkClick(e, 'home')}
-            id="brand-logo-link"
-            className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#88D628] rounded-lg text-left"
-          >
-            <SolareignLogo />
-          </button>
+          <div className="flex-1 flex items-center justify-start">
+            <button
+              onClick={(e) => handleLinkClick(e, 'home')}
+              id="brand-logo-link"
+              className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#88D628] rounded-lg text-left"
+            >
+              <SolareignLogo />
+            </button>
+          </div>
 
-          {/* Right Navigation: Home, About, Services, Portfolio */}
+          {/* Middle: Four button hyperlinks */}
           <nav
             id="desktop-nav-menu"
             aria-label="Main Navigation"
-            className="hidden md:flex items-center gap-8"
+            className="hidden md:flex items-center justify-center gap-8 lg:gap-10 shrink-0"
           >
             {navLinks.map((link) => {
               const isActive = 
@@ -78,7 +80,7 @@ export default function Navbar({
                   key={link.id}
                   id={`nav-link-${link.id}`}
                   onClick={(e) => handleLinkClick(e, link.id)}
-                  className={`text-sm tracking-tight transition-all duration-200 relative py-2 font-bold cursor-pointer ${
+                  className={`text-sm tracking-tight transition-all duration-200 relative py-2 font-bold cursor-pointer whitespace-nowrap ${
                     isActive
                       ? 'text-[#0F5A29]'
                       : 'text-slate-600 hover:text-[#0F5A29]'
@@ -102,18 +104,34 @@ export default function Navbar({
             })}
           </nav>
 
-          {/* Mobile menu toggle */}
-          <div className="md:hidden flex items-center">
+          {/* Right: Get A Quotation button & Mobile menu toggle */}
+          <div className="flex-1 flex items-center justify-end gap-3">
             <button
-              id="mobile-menu-toggle-btn"
               type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl text-slate-700 hover:text-[#0F5A29] hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-[#88D628]"
-              aria-expanded={mobileMenuOpen}
-              aria-label="Toggle navigation menu"
+              id="nav-get-quotation-btn"
+              onClick={(e) => handleLinkClick(e, 'quotation')}
+              className={`hidden md:inline-flex items-center justify-center px-5 py-2.5 rounded-xl text-sm font-black transition-colors duration-150 cursor-pointer select-none ${
+                activePage.toLowerCase() === 'quotation'
+                  ? 'bg-[#88D628] text-[#0F5A29] ring-2 ring-[#0F5A29]/20 shadow-md'
+                  : 'bg-[#88D628] hover:bg-[#7bc421] active:bg-[#6eb21c] text-[#0F5A29] shadow-xs'
+              }`}
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              Get A Quotation
             </button>
+
+            {/* Mobile menu toggle */}
+            <div className="md:hidden flex items-center">
+              <button
+                id="mobile-menu-toggle-btn"
+                type="button"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 rounded-xl text-slate-700 hover:text-[#0F5A29] hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-[#88D628]"
+                aria-expanded={mobileMenuOpen}
+                aria-label="Toggle navigation menu"
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -142,6 +160,20 @@ export default function Navbar({
                 </button>
               );
             })}
+            <div className="pt-2 px-1">
+              <button
+                type="button"
+                id="mobile-nav-get-quotation-btn"
+                onClick={(e) => handleLinkClick(e, 'quotation')}
+                className={`w-full py-3 px-4 rounded-xl text-center text-sm font-black transition-colors duration-150 cursor-pointer ${
+                  activePage.toLowerCase() === 'quotation'
+                    ? 'bg-[#88D628] text-[#0F5A29] ring-2 ring-[#0F5A29]/20 shadow-md'
+                    : 'bg-[#88D628] hover:bg-[#7bc421] active:bg-[#6eb21c] text-[#0F5A29] shadow-xs'
+                }`}
+              >
+                Get A Quotation
+              </button>
+            </div>
           </div>
         )}
       </div>

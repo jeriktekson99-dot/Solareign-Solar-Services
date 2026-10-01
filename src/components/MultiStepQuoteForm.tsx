@@ -27,9 +27,16 @@ import { uploadImageWithCompression, formatBytes } from '../utils/fileUtils';
 
 interface MultiStepQuoteFormProps {
   initialFocusRef?: React.RefObject<HTMLInputElement>;
+  size?: 'default' | 'large';
+  className?: string;
 }
 
-export default function MultiStepQuoteForm({ initialFocusRef }: MultiStepQuoteFormProps) {
+export default function MultiStepQuoteForm({ 
+  initialFocusRef, 
+  size = 'default', 
+  className = '' 
+}: MultiStepQuoteFormProps) {
+  const isLarge = size === 'large';
   const { addLead } = useSolareignData();
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -325,7 +332,13 @@ export default function MultiStepQuoteForm({ initialFocusRef }: MultiStepQuoteFo
   return (
     <div
       id="hero-quote-container"
-      className="relative w-full max-w-[530px] rounded-2xl sm:rounded-3xl bg-[#061D0F] text-white shadow-2xl border-2 border-[#88D628]/60 p-5 sm:p-6 flex flex-col justify-between text-left overflow-hidden"
+      className={`relative w-full ${
+        className 
+          ? className 
+          : isLarge 
+            ? 'max-w-[615px] p-6 sm:p-7 lg:p-8' 
+            : 'max-w-[530px] p-5 sm:p-6'
+      } rounded-2xl sm:rounded-3xl bg-[#061D0F] text-white shadow-2xl border-2 border-[#88D628]/60 flex flex-col justify-between text-left overflow-hidden`}
     >
       {/* Confirmation / Success Screen (Step 5) */}
       {isSubmitted ? (
@@ -400,16 +413,16 @@ export default function MultiStepQuoteForm({ initialFocusRef }: MultiStepQuoteFo
           {/* Top Bar: Title + Step Counter */}
           <div>
             <div className="flex items-center justify-between gap-2 pb-1">
-              <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase">
+              <h3 className={`${isLarge ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl'} font-black text-white tracking-tight uppercase`}>
                 SEND US A MESSAGE
               </h3>
-              <div className="text-xs sm:text-sm font-black text-[#88D628] tracking-wider uppercase font-mono">
+              <div className={`${isLarge ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'} font-black text-[#88D628] tracking-wider uppercase font-mono`}>
                 STEP {currentStep} OF 4
               </div>
             </div>
 
             {/* 4-Segment Progress Bar */}
-            <div className="grid grid-cols-4 gap-2 my-2">
+            <div className={`grid grid-cols-4 gap-2 ${isLarge ? 'my-3' : 'my-2'}`}>
               <div
                 className={`h-1.5 rounded-full transition-all duration-300 ${
                   currentStep >= 1 ? 'bg-[#88D628]' : 'bg-white/15'
@@ -433,9 +446,9 @@ export default function MultiStepQuoteForm({ initialFocusRef }: MultiStepQuoteFo
             </div>
 
             {/* Subheader Categorization */}
-            <div className="flex items-center gap-3 my-2.5">
+            <div className={`flex items-center gap-3 ${isLarge ? 'my-3.5' : 'my-2.5'}`}>
               <div className="h-[1px] bg-[#88D628]/35 flex-1" />
-              <span className="text-[10px] sm:text-[11px] font-black tracking-widest text-[#88D628] uppercase font-mono">
+              <span className={`${isLarge ? 'text-xs sm:text-sm' : 'text-[10px] sm:text-[11px]'} font-black tracking-widest text-[#88D628] uppercase font-mono`}>
                 {currentStep === 1 && 'IDENTITY & LOCATION'}
                 {currentStep === 2 && 'ENERGY & ROOF SPECS'}
                 {currentStep === 3 && 'INVERTER & PANEL SETUP'}
@@ -1050,12 +1063,12 @@ export default function MultiStepQuoteForm({ initialFocusRef }: MultiStepQuoteFo
           </div>
 
           {/* Navigation Controls (Bottom Bar) */}
-          <div className={`flex items-center gap-3 ${currentStep > 1 ? 'pt-2.5 border-t border-white/10' : 'pt-2 sm:pt-3'}`}>
+          <div className={`flex items-center gap-3 ${currentStep > 1 ? 'pt-2.5 border-t border-white/10' : isLarge ? 'pt-3 sm:pt-4' : 'pt-2 sm:pt-3'}`}>
             {currentStep > 1 && (
               <button
                 type="button"
                 onClick={() => setCurrentStep((prev) => (prev - 1) as 1 | 2 | 3 | 4)}
-                className="flex-[0.38] min-w-[105px] flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-[#031308] hover:bg-white/10 active:bg-white/15 text-white border border-white/20 font-bold text-sm transition-all cursor-pointer"
+                className={`flex-[0.38] min-w-[105px] flex items-center justify-center gap-2 ${isLarge ? 'py-4 px-4 text-sm sm:text-base' : 'py-3.5 px-4 text-sm'} rounded-xl bg-[#031308] hover:bg-white/10 active:bg-white/15 text-white border border-white/20 font-bold transition-all cursor-pointer`}
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back</span>
@@ -1070,7 +1083,7 @@ export default function MultiStepQuoteForm({ initialFocusRef }: MultiStepQuoteFo
                   else if (currentStep === 2) handleStep2Continue();
                   else if (currentStep === 3) handleStep3Continue();
                 }}
-                className="flex-1 flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl bg-[#88D628] hover:bg-[#7bc421] active:bg-[#6eb21c] text-[#0F5A29] font-black text-sm tracking-wide transition-colors duration-150 cursor-pointer"
+                className={`flex-1 flex items-center justify-center gap-2 ${isLarge ? 'py-4 px-6 text-sm sm:text-base' : 'py-3.5 px-5 text-sm'} rounded-xl bg-[#88D628] hover:bg-[#7bc421] active:bg-[#6eb21c] text-[#0F5A29] font-black tracking-wide transition-colors duration-150 cursor-pointer`}
               >
                 <span>CONTINUE</span>
                 <ArrowRight className="w-4 h-4 stroke-[2.5]" />
@@ -1080,7 +1093,7 @@ export default function MultiStepQuoteForm({ initialFocusRef }: MultiStepQuoteFo
                 type="button"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="flex-1 flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl bg-[#88D628] hover:bg-[#7bc421] active:bg-[#6eb21c] text-[#0F5A29] font-black text-sm tracking-wide transition-colors duration-150 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                className={`flex-1 flex items-center justify-center gap-2 ${isLarge ? 'py-4 px-6 text-sm sm:text-base' : 'py-3.5 px-5 text-sm'} rounded-xl bg-[#88D628] hover:bg-[#7bc421] active:bg-[#6eb21c] text-[#0F5A29] font-black tracking-wide transition-colors duration-150 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed`}
               >
                 {isSubmitting ? (
                   <span className="inline-flex items-center gap-2">
